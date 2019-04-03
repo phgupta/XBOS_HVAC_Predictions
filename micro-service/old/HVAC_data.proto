@@ -17,6 +17,7 @@ service HVACData {
 // The request message containing the requested data information.
 message HVACRequest {
 
+    // List of buildings - list(str)
     repeated string buildings = 1;
 
     // Start time - 'YYYY-MM-DDTHH:MM:SSZ'

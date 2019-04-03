@@ -67,7 +67,7 @@ class Import_Data():
 
         Parameters
         ----------
-        site            : list(str)
+        sites            : list(str)
             List of sites.
         start           : str
             Start date. Format - 'YYYY-MM-DDTHH:MM:SS' or 'YYYY-MM-DDTHH:MM:SSZ' where Z means UTC.
@@ -115,7 +115,7 @@ class Import_Data():
 
             yield site, df
 
-    def get_meter_data(self, site, start, end, point_type="Green_Button_Meter", agg=pymortar.MEAN, window='15m'):
+    def get_meter_data(self, site, start, end, point_type="Green_Button_Meter", agg='MEAN', window='15m'):
         """ Get meter data from Mortar.
 
         Parameters
@@ -140,6 +140,10 @@ class Import_Data():
             Meter data, dictionary that maps meter data's columns (uuid's) to sitenames.
 
         """
+
+        # CHECK: Hacky code. Change this later
+        if agg == 'MEAN':
+            agg = pymortar.MEAN
 
         # CHECK: Does Mortar take in UTC or local time? 
         # Convert time to UTC
