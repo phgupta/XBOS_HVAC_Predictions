@@ -21,13 +21,17 @@ def run():
 
         try:
 
+            # start and end time should have the same format, i.e. 'YYYY-MM-DDTHH:MM:SSZ'
             start = '2018-01-01T00:00:00Z'
             end = '2018-01-15T00:00:00Z'
-            bldg = ["ciee"]
             point_type = 'Building_Electric_Meter'
             aggregate = 'MEAN'
             window = '15m'
 
+            # Note: bldg expects a type - list(str), so even for 1 site, encapsulate it in a list
+            bldg = ["ciee"]
+
+            # Create gRPC request object
             request = MeterData_pb2.Request(
                 buildings=bldg,
                 start=start,

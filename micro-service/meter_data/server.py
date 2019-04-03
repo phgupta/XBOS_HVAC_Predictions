@@ -11,26 +11,38 @@ from Import_Data import Import_Data
 import MeterData_pb2
 import MeterData_pb2_grpc
 
-# CHECK: Change port
-METER_DATA_HOST_ADDRESS = 'localhost:1234'
+METER_DATA_HOST_ADDRESS = 'localhost:1234' # CHECK: Change port!
 _ONE_DAY_IN_SECONDS = 60 * 60 * 24
 
 
 class MeterDataServicer(MeterData_pb2_grpc.MeterDataServicer):
 
     def __init__(self):
+        """ Constructor: Creates an instance of Import_Data which uses pymortar to fetch meter data. """
         self.import_data_obj = Import_Data()
 
     def get_data_from_request(self, request):
+        """
 
+        Parameters
+        ----------
+        request     : gRPC request
+            Contains parameters to fetch data.
+
+        Returns
+        -------
+        gRPC response
+            List of points containing the datetime and power consumption.
+
+        """
+
+        # Retrieve parameters from gRPC request object
         site = request.buildings
         start = request.start
         end = request.end
         point_type = request.point_type
         aggregate = request.aggregate
         window = request.window
-
-        # CHECK: Do error checking for all parameters here
 
         df, map_uuid_meter = self.import_data_obj.get_meter_data(site=site,
                                                                  start=start, end=end, point_type=point_type,
@@ -45,6 +57,20 @@ class MeterDataServicer(MeterData_pb2_grpc.MeterDataServicer):
         return MeterData_pb2.Reply(point=result)
 
     def GetMeterData(self, request, context):
+        """
+
+        Parameters
+        ----------
+        request     : gRPC request
+            Contains parameters to fetch data.
+        context
+
+        Returns
+        -------
+        gRPC response
+            List of points containing the datetime and power consumption.
+
+        """
 
         result = self.get_data_from_request(request)
 
