@@ -13,7 +13,7 @@ import HVAC_data_pb2_grpc
 
 # CHECK: Need different port for this application
 # HVAC_DATA_HOST_ADDRESS = os.environ["OUTDOOR_TEMPERATURE_HISTORICAL_HOST_ADDRESS"]
-HVAC_DATA_HOST_ADDRESS = 'localhost:50058'
+HVAC_DATA_HOST_ADDRESS = 'localhost:1234'
 _ONE_DAY_IN_SECONDS = 60 * 60 * 24
 
 
@@ -25,19 +25,19 @@ class HVACDataServicer(HVAC_data_pb2_grpc.HVACDataServicer):
 
     def get_data_from_request(self, request):
 
-        site = request.building
+        site = request.buildings
         start = request.start
         end = request.end
         point_type = request.point_type
 
         aggregate = {
-            'meter': request.Aggregate.meter,
-            'tstat': request.Aggregate.tstat
+            'meter': request.agg.meter,
+            'tstat': request.agg.tstat
         }
 
         window = {
-            'meter': request.Window.meter,
-            'tstat': request.Window.tstat
+            'meter': request.window.meter,
+            'tstat': request.window.tstat
         }
 
         # CHECK: Do error checking for all parameters here
@@ -48,12 +48,14 @@ class HVACDataServicer(HVAC_data_pb2_grpc.HVACDataServicer):
             for index, row in df.iterrows():
 
                 # CHECK: Can be optimized or rewritten later
-                states = [int(row[col]) for col in df.columns if df.columns.startswith('s')]
+                states = [int(row[col]) for col in df.columns if col.startswith('s')]
+                iat = [int(row[col]) for col in df.columns if col.startswith('t')]
 
                 hvac_point = HVAC_data_pb2.HVACPoint(
-                    time=int(row['power']),
-                    iat=float(row['iat']),
+                    time=str(index),
                     oat=float(row['oat']),
+                    power=float(row['power']),
+                    iat=iat,
                     state=states
                 )
                 result.append(hvac_point)
@@ -64,7 +66,7 @@ class HVACDataServicer(HVAC_data_pb2_grpc.HVACDataServicer):
 
         df_hvac_reply = self.get_data_from_request(request)
 
-        if df.empty:
+        if not df_hvac_reply:
             # List of status codes: https: // github.com / grpc / grpc / blob / master / doc / statuscodes.md
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             # context.set_details(error)

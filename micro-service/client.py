@@ -1,8 +1,5 @@
 import grpc
-import pytz
-import calendar
-import datetime
-
+import pandas as pd
 from pathlib import Path
 import sys
 sys.path.append(str(Path.cwd().parent))
@@ -10,8 +7,7 @@ sys.path.append(str(Path.cwd().parent))
 import HVAC_data_pb2
 import HVAC_data_pb2_grpc
 
-_EPOCH = datetime.datetime(1970, 1, 1, tzinfo=pytz.utc)
-HOST_ADDRESS = 'localhost:50058'
+HOST_ADDRESS = 'localhost:1234'
 
 
 def run():
@@ -24,24 +20,22 @@ def run():
         stub = HVAC_data_pb2_grpc.HVACDataStub(channel)
 
         try:
-            d_start = pytz.utc.localize(datetime.datetime(2018, 1, 1, minute=2))
-            d_end = d_start + datetime.timedelta(days=2)
-            start = int(calendar.timegm(d_start.utctimetuple()) * 1e9)
-            end = int(calendar.timegm(d_end.utctimetuple()) * 1e9)
 
-            bldg = "ciee"
+            start = '2018-01-01T00:00:00Z'
+            end = '2018-01-15T00:00:00Z'
+            bldg = ["ciee"]
             point_type = 'Building_Electric_Meter'
 
             request = HVAC_data_pb2.HVACRequest(
-                building=bldg,
+                buildings=bldg,
                 start=start,
                 end=end,
                 point_type=point_type,
-                Aggregate=HVAC_data_pb2.Aggregate(
+                agg=HVAC_data_pb2.HVACRequest.Aggregate(
                     meter='MEAN',
                     tstat='MAX'
                 ),
-                Window=HVAC_data_pb2.Window(
+                window=HVAC_data_pb2.HVACRequest.Window(
                     meter='1m',
                     tstat='1m'
                 )
@@ -49,8 +43,12 @@ def run():
 
             response = stub.GetHVACData(request)
 
+            df = pd.DataFrame()
             for point in response.point:
-                print('oat: ', point.oat)
+                temp = [point.time, point.power, point.oat]
+                df = df.append([temp + list(point.iat) + list(point.state)])
+
+            df.to_csv('response.csv')
 
         except grpc.RpcError as e:
             print(e)

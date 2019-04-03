@@ -106,10 +106,11 @@ class Import_Data():
             df_oat = self.get_weather_data(site=site, start=start, end=end, window=window['tstat'])
             # CHECK: Hacky code. Change later
             df_oat.columns = ['oat']
+            df_oat.index = df_oat.index.tz_localize('UTC')
 
             df_tstat = self.get_tstat_data(site=[site], start=start, end=end,
                                            window=window['tstat'])
-
+        
             df = pd.concat([df_meter, df_oat, df_tstat], axis=1, join='outer').dropna()
 
             yield site, df
