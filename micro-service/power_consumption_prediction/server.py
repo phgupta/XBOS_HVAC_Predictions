@@ -3,13 +3,11 @@
 import time
 import grpc
 import pytz
+import pickle
 import pandas as pd
 from concurrent import futures
 from datetime import datetime
-import xbos_services_getter
-
-# import sys
-# sys.path.append('../..')
+import sklearn
 
 import PowerConsumptionPrediction_pb2
 import PowerConsumptionPrediction_pb2_grpc
@@ -21,14 +19,95 @@ _ONE_DAY_IN_SECONDS = 60 * 60 * 24
 class PowerConsumptionPredictionServicer(PowerConsumptionPrediction_pb2_grpc.PowerConsumptionPredictionServicer):
 
     def __init__(self):
-        """ Constructor. Stores raw data, model weights and predictions. """
+        """ Constructor. """
+
+        self.model_folder = 'models/'
+
         self.data = None
+        self.building_name = None
+        self.window = None
+        self.start_time = None
+        self.end_time = None
 
-        # """ Constructor: Creates an instance of Import_Data which uses pymortar to fetch meter data. """
-        # self.import_data_obj = Import_Data()
+        # Currently supported buildings
+        self.supported_buildings = [
+            "orinda-public-library",
+            "orinda-community-center",
+            "hayward-station-1",
+            "hayward-station-8",
+            "avenal-animal-shelter",
+            "avenal-movie-theatre",
+            "avenal-public-works-yard",
+            "avenal-recreation-center",
+            "avenal-veterans-hall",
+            "south-berkeley-senior-center",
+            "north-berkeley-senior-center",
+            "berkeley-corporation-yard",
+            "word-of-faith-cc",
+            "local-butcher-shop",
+            "jesse-turner-center",
+            "ciee",
+            "csu-dominguez-hills"
+        ]
 
-    def get_data_from_request(self, request):
+    @staticmethod
+    def add_time_features(data, year=False, month=False, week=False, tod=True, dow=True):
         """
+
+        Parameters
+        ----------
+        data    : pd.DataFrame()
+            Dataframe to add time features to.
+        year    : bool
+            Year.
+        month   : bool
+            Month (0-11)
+        week    : bool
+            Week (0-51)
+        tod     : bool
+            Time of Day (0-23)
+        dow     : bool
+            Day of Week (0-6)
+
+        Returns
+        -------
+        pd.DataFrame()
+            Dataframe with time features added as columns.
+
+        """
+
+        var_to_expand = []
+
+        if year:
+            data["year"] = data.index.year
+            var_to_expand.append("year")
+        if month:
+            data["month"] = data.index.month
+            var_to_expand.append("month")
+        if week:
+            data["week"] = data.index.week
+            var_to_expand.append("week")
+        if tod:
+            data["tod"] = data.index.hour
+            var_to_expand.append("tod")
+        if dow:
+            data["dow"] = data.index.weekday
+            var_to_expand.append("dow")
+
+        # One-hot encode the time features
+        for var in var_to_expand:
+            add_var = pd.get_dummies(data[var], prefix=var, drop_first=True)
+
+            # Add all the columns to the model data
+            data = data.join(add_var)
+
+            # Drop the original column that was expanded
+            data.drop(columns=[var], inplace=True)
+
+        return data
+
+    def get_parameters(self, request):
+        """ Storing and error checking request parameters.
 
         Parameters
         ----------
@@ -37,59 +116,78 @@ class PowerConsumptionPredictionServicer(PowerConsumptionPrediction_pb2_grpc.Pow
 
         Returns
         -------
-        gRPC response
-            List of points containing the datetime and power consumption.
+        str
+            Error message.
 
         """
 
         # Retrieve parameters from gRPC request object
-        bldg = request.building
-        wndw = request.window
-        start_datetime = datetime.utcfromtimestamp(float(request.start/1e9)).replace(tzinfo=pytz.utc)
-        end_datetime = datetime.utcfromtimestamp(float(request.end/1e9)).replace(tzinfo=pytz.utc)
+        self.building_name = request.building
+        self.window = request.window
+        self.start_time = datetime.utcfromtimestamp(float(request.start/1e9)).replace(tzinfo=pytz.utc)
+        self.end_time = datetime.utcfromtimestamp(float(request.end/1e9)).replace(tzinfo=pytz.utc)
 
-        print('start_datetime: ', start_datetime)
-        print(('end_datetime: ', end_datetime))
+        if any(not elem for elem in [self.building_name, self.window, self.start_time, self.end_time]):
+            return "invalid request, empty param(s)"
 
-        print('Retrieving data from get_actions_historics()...')
+        # Add error checking for window
 
-        # Parameters for training data
-        start = datetime(2018, 1, 1, 0, 0, 0, 0, pytz.UTC)
-        end = datetime(2018, 1, 15, 0, 0, 0, 0, pytz.UTC)
-        point_type = 'Building_Electric_Meter'
-        agg = 'MEAN'
-        window = '15m'
+        if request.end > int((time.time() + _ONE_DAY_IN_SECONDS * 6) * 1e9):
+            return "invalid request, end date is too far in the future, max is 6 days from now"
 
-        map_zone_state = {}
-        for point in request.map_zone_state:
-            map_zone_state[point.zone] = point.state
+        if request.start < int(time.time() * 1e9):
+            return "invalid request, start date is in the past."
 
-        df_states = pd.DataFrame()
-        indoor_historic_stub = xbos_services_getter.get_indoor_historic_stub()
+        if request.start >= request.end:
+            return "invalid request, start date is equal or after end date."
 
-        for zone in map_zone_state.keys():
+        if request.building not in self.supported_buildings:
+            return "invalid request, building not found, supported buildings:" + str(self.supported_buildings)
 
-            temp = xbos_services_getter.get_actions_historic(indoor_historic_stub, building=bldg,
-                                                             start=start, end=end,
-                                                             window=window, zone=zone)
-            df_states[zone] = temp
+        # # Other error checkings
+        # duration = utils.get_window_in_sec(request.window)
+        # if duration <= 0:
+        #     return None, "invalid request, duration is negative or zero"
+        # if request.start + (duration * 1e9) > request.end:
+        #     return None, "invalid request, start date + window is greater than end date"
 
-        print('Retrieved data from get_actions_historics()!!!')
-        print('Retrieving data from get_meter_data()...')
+    def get_predictions(self):
+        """ Retrieve model weights and return predictions.
 
-        meter_data_historical_stub = xbos_services_getter.get_meter_data_historical_stub()
-        df_meter = xbos_services_getter.get_meter_data_historical(meter_data_stub=meter_data_historical_stub,
-                                                                  bldg=[bldg], point_type=point_type,
-                                                                  start=start, end=end,
-                                                                  aggregate=agg, window=window)
-        df_meter.columns = ['power']
+        Returns
+        -------
+        gRPC response
+            List of points containing the datetime and power consumption prediction.
 
-        print('Retrieved data from get_meter_data()!!!')
+        """
 
-        df_result = df_states.join(df_meter)
+        indices = pd.date_range(start=self.start_time, freq=self.window, end=self.end_time)
+        X_test = pd.DataFrame(index=indices)
+
+        # CHECK: Change later.
+        # Determine how to find out the features for the model
+        cols = []
+        for i in range(1, 24):
+            cols.append('tod_' + str(i))
+        for i in range(1, 7):
+            cols.append('dow_' + str(i))
+        for i in range(14):
+            cols.append('s' + str(i))
+
+        X_test = self.add_time_features(X_test)
+
+        for col in cols:
+            if col not in list(X_test.columns):
+                X_test[col] = 0
+
+        loaded_model = pickle.load(open(self.model_folder + self.building_name + '.sav', 'rb'))
+        y_pred = loaded_model.predict(X_test)
+
         result = []
-        for index, row in df_result.iterrows():
-            point = PowerConsumptionPrediction_pb2.Reply.PowerConsumptionPredictionPoint(time=str(index), power=row['power'])
+        for i in range(len(y_pred)):
+            point = PowerConsumptionPrediction_pb2.Reply.PowerConsumptionPredictionPoint(
+                time=indices[i].strftime('%Y-%m-%d %H:%M:%S'), power=y_pred[i]
+            )
             result.append(point)
 
         return PowerConsumptionPrediction_pb2.Reply(point=result)
@@ -111,15 +209,22 @@ class PowerConsumptionPredictionServicer(PowerConsumptionPrediction_pb2_grpc.Pow
 
         """
 
-        result = self.get_data_from_request(request)
+        error = self.get_parameters(request)
 
-        if not result:
-            # List of status codes: https: // github.com / grpc / grpc / blob / master / doc / statuscodes.md
+        if error:
+            # List of status codes: https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            # context.set_details(error)
+            context.set_details(error)
             return PowerConsumptionPrediction_pb2.Reply()
         else:
-            return result
+
+            result = self.get_predictions()
+
+            if not result:
+                context.set_code(grpc.StatusCode.NOT_FOUND)
+                return PowerConsumptionPrediction_pb2.Reply()
+
+        return result
 
 
 if __name__ == '__main__':

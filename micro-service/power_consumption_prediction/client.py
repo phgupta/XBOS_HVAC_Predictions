@@ -1,8 +1,5 @@
 import grpc
 import pandas as pd
-# from pathlib import Path
-# import sys
-# sys.path.append(str(Path.cwd().parent))
 
 import PowerConsumptionPrediction_pb2
 import PowerConsumptionPrediction_pb2_grpc
@@ -21,12 +18,25 @@ def run():
 
         try:
 
-            bldg = "ciee"
-            start = 1555198200000000000
-            end = 1555212600000000000
-            window = '15m'
+            bldg = "orinda-community-center"
+            start = 1555228800000000000
+            end = 1555236000000000000
+            window = '15T'
             dic = {
-                'hvac_zone_centralzone': 0
+                'hvac_zone_ac_7': 0,
+                'hvac_zone_rm7': 0,
+                'hvac_zone_kinder_gym': 0,
+                'hvac_zone_ac_6': 0,
+                'hvac_zone_ac_3': 0,
+                'hvac_zone_rm1': 0,
+                'hvac_zone_ac_4': 0,
+                'hvac_zone_ac_5': 0,
+                'hvac_zone_rm6': 0,
+                'hvac_zone_ac_1': 0,
+                'hvac_zone_front_office': 0,
+                'hvac_zone_ac_2': 0,
+                'hvac_zone_rm2': 0,
+                'hvac_zone_ac_8': 0
             }
 
             lst = []
@@ -45,7 +55,9 @@ def run():
                 map_zone_state=lst
             )
 
+            print('before')
             response = stub.GetPowerConsumptionPrediction(request)
+            print('after')
 
             df = pd.DataFrame()
             for point in response.point:
