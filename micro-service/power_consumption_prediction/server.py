@@ -1,4 +1,10 @@
-""" gRPC Server & client examples - https://grpc.io/docs/tutorials/basic/python.html """
+""" gRPC Server & client examples - https://grpc.io/docs/tutorials/basic/python.html
+
+TODO
+1. Get zone and state values from request.
+2. Set X_test[col] = state.
+
+"""
 
 import time
 import grpc
@@ -127,6 +133,8 @@ class PowerConsumptionPredictionServicer(PowerConsumptionPrediction_pb2_grpc.Pow
         self.start_time = datetime.utcfromtimestamp(float(request.start/1e9)).replace(tzinfo=pytz.utc)
         self.end_time = datetime.utcfromtimestamp(float(request.end/1e9)).replace(tzinfo=pytz.utc)
 
+        # CHECK: Get zone and state parameters here.
+
         if any(not elem for elem in [self.building_name, self.window, self.start_time, self.end_time]):
             return "invalid request, empty param(s)"
 
@@ -176,6 +184,7 @@ class PowerConsumptionPredictionServicer(PowerConsumptionPrediction_pb2_grpc.Pow
 
         X_test = self.add_time_features(X_test)
 
+        # CHECK: Set X_test[col] to state.
         for col in cols:
             if col not in list(X_test.columns):
                 X_test[col] = 0

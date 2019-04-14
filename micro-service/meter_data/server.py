@@ -4,8 +4,8 @@ import time
 import grpc
 from concurrent import futures
 
-import sys
-sys.path.append('../..')
+# import sys
+# sys.path.append('../..')
 from Import_Data import Import_Data
 
 import MeterData_pb2
