@@ -4,7 +4,8 @@ import pandas as pd
 import PowerConsumptionPrediction_pb2
 import PowerConsumptionPrediction_pb2_grpc
 
-HOST_ADDRESS = 'localhost:1234'  # CHECK: Change port!
+# CHECK: Change port!
+HOST_ADDRESS = 'localhost:1234'
 
 
 def run():
@@ -18,25 +19,17 @@ def run():
 
         try:
 
-            bldg = "orinda-community-center"
-            start = 1555228800000000000
-            end = 1555236000000000000
+            bldg = "ciee"
+            start   = 1555376400000000000
+            end     = 1555387200000000000
             window = '15T'
+
+            # Specify all zones and their state values.
             dic = {
-                'hvac_zone_ac_7': 0,
-                'hvac_zone_rm7': 0,
-                'hvac_zone_kinder_gym': 0,
-                'hvac_zone_ac_6': 0,
-                'hvac_zone_ac_3': 0,
-                'hvac_zone_rm1': 0,
-                'hvac_zone_ac_4': 0,
-                'hvac_zone_ac_5': 0,
-                'hvac_zone_rm6': 0,
-                'hvac_zone_ac_1': 0,
-                'hvac_zone_front_office': 0,
-                'hvac_zone_ac_2': 0,
-                'hvac_zone_rm2': 0,
-                'hvac_zone_ac_8': 0
+                'hvac_zone_centralzone': 0,
+                'hvac_zone_eastzone': 1,
+                'hvac_zone_northzone': 2,
+                'hvac_zone_southzone': 3
             }
 
             lst = []
@@ -55,9 +48,7 @@ def run():
                 map_zone_state=lst
             )
 
-            print('before')
             response = stub.GetPowerConsumptionPrediction(request)
-            print('after')
 
             df = pd.DataFrame()
             for point in response.point:
@@ -65,7 +56,7 @@ def run():
 
             df.columns = ['datetime', 'power']
             df.set_index('datetime', inplace=True)
-            df.to_csv(bldg + '.csv')
+            df.to_csv(bldg + '-predictions.csv')
 
         except grpc.RpcError as e:
             print(e)

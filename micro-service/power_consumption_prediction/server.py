@@ -1,24 +1,21 @@
-""" gRPC Server & client examples - https://grpc.io/docs/tutorials/basic/python.html
-
-TODO
-1. Get zone and state values from request.
-2. Set X_test[col] = state.
-
-"""
+""" gRPC Server & client examples - https://grpc.io/docs/tutorials/basic/python.html """
 
 import time
 import grpc
 import pytz
+import json
 import pickle
 import pandas as pd
 from concurrent import futures
 from datetime import datetime
+import xbos_services_getter
 import sklearn
 
 import PowerConsumptionPrediction_pb2
 import PowerConsumptionPrediction_pb2_grpc
 
-HOST_ADDRESS = 'localhost:1234'  # CHECK: Change port!
+# CHECK: Change port!
+HOST_ADDRESS = 'localhost:1234'
 _ONE_DAY_IN_SECONDS = 60 * 60 * 24
 
 
@@ -34,6 +31,8 @@ class PowerConsumptionPredictionServicer(PowerConsumptionPrediction_pb2_grpc.Pow
         self.window = None
         self.start_time = None
         self.end_time = None
+        self.map_zone_state = {}
+        self.zones = None
 
         # Currently supported buildings
         self.supported_buildings = [
@@ -133,7 +132,15 @@ class PowerConsumptionPredictionServicer(PowerConsumptionPrediction_pb2_grpc.Pow
         self.start_time = datetime.utcfromtimestamp(float(request.start/1e9)).replace(tzinfo=pytz.utc)
         self.end_time = datetime.utcfromtimestamp(float(request.end/1e9)).replace(tzinfo=pytz.utc)
 
-        # CHECK: Get zone and state parameters here.
+        for dic in request.map_zone_state:
+            self.map_zone_state[dic.zone] = dic.state
+
+        # List of zones in building
+        building_zone_names_stub = xbos_services_getter.get_building_zone_names_stub()
+        self.zones = xbos_services_getter.get_zones(building_zone_names_stub, self.building_name)
+
+        if set(self.map_zone_state.keys()) != set(self.zones):
+            return "invalid request, specify all zones and their states of the building."
 
         if any(not elem for elem in [self.building_name, self.window, self.start_time, self.end_time]):
             return "invalid request, empty param(s)"
@@ -172,24 +179,42 @@ class PowerConsumptionPredictionServicer(PowerConsumptionPrediction_pb2_grpc.Pow
         indices = pd.date_range(start=self.start_time, freq=self.window, end=self.end_time)
         X_test = pd.DataFrame(index=indices)
 
-        # CHECK: Change later.
-        # Determine how to find out the features for the model
+        time_features = []
+        with open(self.model_folder + self.building_name + '-model.json') as json_file:
+            data = json.load(json_file)
+            time_features = data['time_features']
+            train_zone_cols = data['zone_columns']
+
+        # Add time features to X_test
         cols = []
-        for i in range(1, 24):
-            cols.append('tod_' + str(i))
-        for i in range(1, 7):
-            cols.append('dow_' + str(i))
-        for i in range(14):
-            cols.append('s' + str(i))
+        for feature in time_features:
+            if feature == 'tod':
+                for i in range(1, 24):
+                    cols.append('tod_' + str(i))
+            if feature == 'dow':
+                for i in range(1, 7):
+                    cols.append('dow_' + str(i))
 
         X_test = self.add_time_features(X_test)
-
-        # CHECK: Set X_test[col] to state.
+        X_test_cols = list(X_test)
         for col in cols:
-            if col not in list(X_test.columns):
+            if col not in X_test_cols:
                 X_test[col] = 0
 
-        loaded_model = pickle.load(open(self.model_folder + self.building_name + '.sav', 'rb'))
+        # Add zone features to X_test
+        for col in train_zone_cols:
+            X_test[col] = 0
+
+        for zone, state in self.map_zone_state.items():
+            for col in train_zone_cols:
+                if col.startswith(zone):
+                    # CHECK: Hardcoded for now!
+                    if int(col[-3]) == state:
+                        X_test[col] = 1
+                    else:
+                        X_test[col] = 0
+
+        loaded_model = pickle.load(open(self.model_folder + self.building_name + '-model.sav', 'rb'))
         y_pred = loaded_model.predict(X_test)
 
         result = []

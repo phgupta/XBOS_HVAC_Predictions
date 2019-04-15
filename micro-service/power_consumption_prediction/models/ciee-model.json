@@ -1,0 +1,16 @@
+{
+	"time_features": ["tod", "dow"],
+	"zone_columns": [
+		"hvac_zone_centralzone_1.0",
+		"hvac_zone_centralzone_2.0",
+		"hvac_zone_centralzone_3.0",
+		"hvac_zone_eastzone_1.0",
+		"hvac_zone_eastzone_2.0",
+		"hvac_zone_northzone_1.0",
+		"hvac_zone_northzone_2.0",
+		"hvac_zone_northzone_3.0",
+		"hvac_zone_southzone_1.0",
+		"hvac_zone_southzone_2.0",
+		"hvac_zone_southzone_3.0"
+	]
+}
