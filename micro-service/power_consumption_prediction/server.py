@@ -25,8 +25,6 @@ class PowerConsumptionPredictionServicer(PowerConsumptionPrediction_pb2_grpc.Pow
         """ Constructor. """
 
         self.model_folder = 'models/'
-
-        self.data = None
         self.building_name = None
         self.window = None
         self.start_time = None
@@ -34,7 +32,7 @@ class PowerConsumptionPredictionServicer(PowerConsumptionPrediction_pb2_grpc.Pow
         self.map_zone_state = {}
         self.zones = None
 
-        # Currently supported buildings
+        # Currently supported buildings get from microservice
         self.supported_buildings = [
             "orinda-public-library",
             "orinda-community-center",
@@ -125,6 +123,8 @@ class PowerConsumptionPredictionServicer(PowerConsumptionPrediction_pb2_grpc.Pow
             Error message.
 
         """
+
+        # CHECK: Move all error first and then do retrieve paramters from request obj.
 
         # Retrieve parameters from gRPC request object
         self.building_name = request.building
